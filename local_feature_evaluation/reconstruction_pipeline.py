@@ -16,7 +16,7 @@ import types
 
 from tqdm import tqdm
 
-from matchers import mutual_nn_matcher
+from matchers import mutual_nn_matcher, fusion_matcher
 
 from camera import Camera
 
@@ -202,17 +202,33 @@ def match_features(images, paths, args):
         descriptors1 = data1['descriptors']
         scores1 = data1['scores']
         n_keypoints1 = min(args.num_kp, len(descriptors1))
-        descriptors1 = descriptors1[np.argsort(scores1)[-n_keypoints1:]]
+        sorted_idx1 = np.argsort(scores1)
+        descriptors1 = descriptors1[sorted_idx1[-n_keypoints1:]]
         descriptors1 = torch.from_numpy(descriptors1).to(device).float()
 
         data2 = np.load(features_path2)
         descriptors2 = data2['descriptors']
         scores2 = data2['scores']
         n_keypoints2 = min(args.num_kp, len(descriptors2))
-        descriptors2 = descriptors2[np.argsort(scores2)[-n_keypoints2:]]
+        sorted_idx2 = np.argsort(scores2)
+        descriptors2 = descriptors2[sorted_idx2[-n_keypoints2:]]
         descriptors2 = torch.from_numpy(descriptors2).to(device).float()
 
-        matches = mutual_nn_matcher(descriptors1, descriptors2).astype(np.uint32)
+        if 'meta_descriptors' in data1:
+            meta_descriptors1 = data1['meta_descriptors1']
+            meta_descriptors1 = meta_descriptors1[sorted_idx1[-n_keypoints1:]]
+            meta_descriptors1 = torch.from_numpy(
+                meta_descriptors1).to(device).float()
+            meta_descriptors2 = data2['meta_descriptors2']
+            meta_descriptors2 = meta_descriptors2[sorted_idx2[-n_keypoints2:]]
+            meta_descriptors2 = torch.from_numpy(
+                meta_descriptors2).to(device).float()
+            matches = fusion_matcher(
+                descriptors1, descriptors2,
+                meta_descriptors1, meta_descriptors2).astype(np.uint32)
+        else:
+            matches = mutual_nn_matcher(descriptors1,
+                                        descriptors2).astype(np.uint32)
 
         image_id1, image_id2 = images[image_name1], images[image_name2]
         image_pair_id = image_ids_to_pair_id(image_id1, image_id2)
