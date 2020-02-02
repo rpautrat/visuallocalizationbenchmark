@@ -152,10 +152,13 @@ def import_features(images, paths, args):
     for image_name, image_id in tqdm(images.items(), total=len(images.items())):
         features_path = os.path.join(paths.image_path, '%s.%s' % (image_name, args.method_name))
         
-        keypoints = np.load(features_path)['keypoints']
-        n_keypoints = keypoints.shape[0]
+        data = np.load(features_path)
+        keypoints = data['keypoints']
+        scores = data['scores']
+        n_keypoints = min(args.num_kp, keypoints.shape[0])
+        keypoints = keypoints[np.argsort(scores)[-n_keypoints:]]
         
-        # Keep only x, y coordinates.
+        # Keep only x, y coordinates
         keypoints = keypoints[:, : 2]
         # Add placeholder scale, orientation.
         keypoints = np.concatenate([keypoints, np.ones((n_keypoints, 1)), np.zeros((n_keypoints, 1))], axis=1).astype(np.float32)
@@ -195,8 +198,20 @@ def match_features(images, paths, args):
         features_path1 = os.path.join(paths.image_path, '%s.%s' % (image_name1, args.method_name))
         features_path2 = os.path.join(paths.image_path, '%s.%s' % (image_name2, args.method_name))
 
-        descriptors1 = torch.from_numpy(np.load(features_path1)['descriptors']).to(device)
-        descriptors2 = torch.from_numpy(np.load(features_path2)['descriptors']).to(device)
+        data1 = np.load(features_path1)
+        descriptors1 = data1['descriptors']
+        scores1 = data1['scores']
+        n_keypoints1 = min(args.num_kp, len(descriptors1))
+        descriptors1 = descriptors1[np.argsort(scores1)[-n_keypoints1:]]
+        descriptors1 = torch.from_numpy(descriptors1).to(device).float()
+
+        data2 = np.load(features_path2)
+        descriptors2 = data2['descriptors']
+        scores2 = data2['scores']
+        n_keypoints2 = min(args.num_kp, len(descriptors2))
+        descriptors2 = descriptors2[np.argsort(scores2)[-n_keypoints2:]]
+        descriptors2 = torch.from_numpy(descriptors2).to(device).float()
+
         matches = mutual_nn_matcher(descriptors1, descriptors2).astype(np.uint32)
 
         image_id1, image_id2 = images[image_name1], images[image_name2]
@@ -303,6 +318,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset_path', required=True, help='Path to the dataset')
     parser.add_argument('--colmap_path', required=True, help='Path to the COLMAP executable folder')
     parser.add_argument('--method_name', required=True, help='Name of the method')
+    parser.add_argument('--num_kp', type=int, default=10000, help='Number of keypoints to use')
     args = parser.parse_args()
 
     # Torch settings for the matcher.
@@ -321,7 +337,7 @@ if __name__ == "__main__":
     paths.database_model_path = os.path.join(args.dataset_path, 'sparse-%s-database' % args.method_name)
     paths.final_model_path = os.path.join(args.dataset_path, 'sparse-%s-final' % args.method_name)
     paths.final_txt_model_path = os.path.join(args.dataset_path, 'sparse-%s-final-txt' % args.method_name)
-    paths.prediction_path = os.path.join(args.dataset_path, 'Aachen_eval_[%s].txt' % args.method_name)
+    paths.prediction_path = os.path.join(args.dataset_path, 'Aachen_eval_%s.txt' % args.method_name)
     
     # Create a copy of the dummy database.
     if os.path.exists(paths.database_path):
