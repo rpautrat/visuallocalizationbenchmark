@@ -215,17 +215,18 @@ def match_features(images, paths, args):
         descriptors2 = torch.from_numpy(descriptors2).to(device).float()
 
         if 'meta_descriptors' in data1:
-            meta_descriptors1 = data1['meta_descriptors1']
+            meta_descriptors1 = data1['meta_descriptors']
             meta_descriptors1 = meta_descriptors1[sorted_idx1[-n_keypoints1:]]
             meta_descriptors1 = torch.from_numpy(
                 meta_descriptors1).to(device).float()
-            meta_descriptors2 = data2['meta_descriptors2']
+            meta_descriptors2 = data2['meta_descriptors']
             meta_descriptors2 = meta_descriptors2[sorted_idx2[-n_keypoints2:]]
             meta_descriptors2 = torch.from_numpy(
                 meta_descriptors2).to(device).float()
             matches = fusion_matcher(
                 descriptors1, descriptors2,
                 meta_descriptors1, meta_descriptors2).astype(np.uint32)
+            del descriptors1, descriptors2, meta_descriptors1, meta_descriptors2
         else:
             matches = mutual_nn_matcher(descriptors1,
                                         descriptors2).astype(np.uint32)
