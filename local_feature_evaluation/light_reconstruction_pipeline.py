@@ -239,9 +239,10 @@ def match_features(images, paths, args):
                 func.grid_sample(meta_descriptors2, grid_points2),
                 dim=1).squeeze(3).permute(2, 0, 1).cpu().numpy()
             del grid_points2
-            matches = fusion_matcher(
-                descriptors1, descriptors2,
-                meta_descriptors1, meta_descriptors2).astype(np.uint32)
+            with torch.no_grad():
+                matches = fusion_matcher(
+                    descriptors1, descriptors2,
+                    meta_descriptors1, meta_descriptors2).astype(np.uint32)
             del descriptors1, descriptors2, meta_descriptors1, meta_descriptors2
         else:
             matches = mutual_nn_matcher(descriptors1,
