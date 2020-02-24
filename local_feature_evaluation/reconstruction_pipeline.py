@@ -223,9 +223,10 @@ def match_features(images, paths, args):
             meta_descriptors2 = meta_descriptors2[sorted_idx2[-n_keypoints2:]]
             meta_descriptors2 = torch.from_numpy(
                 meta_descriptors2).to(device).float()
-            matches = fusion_matcher(
-                descriptors1, descriptors2,
-                meta_descriptors1, meta_descriptors2).astype(np.uint32)
+            with torch.no_grad():
+                matches = fusion_matcher(
+                    descriptors1, descriptors2,
+                    meta_descriptors1, meta_descriptors2).astype(np.uint32)
             del descriptors1, descriptors2, meta_descriptors1, meta_descriptors2
         else:
             matches = mutual_nn_matcher(descriptors1,
