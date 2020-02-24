@@ -230,14 +230,14 @@ def match_features(images, paths, args):
                 meta_descriptors1).to(device).float()
             meta_descriptors1 = func.normalize(
                 func.grid_sample(meta_descriptors1, grid_points1),
-                dim=1).squeeze(3).permute(2, 0, 1).cpu().numpy()
+                dim=1).squeeze(3).permute(2, 0, 1)
             del grid_points1
             meta_descriptors2 = data2['meta_descriptors']
             meta_descriptors2 = torch.from_numpy(
                 meta_descriptors2).to(device).float()
             meta_descriptors2 = func.normalize(
                 func.grid_sample(meta_descriptors2, grid_points2),
-                dim=1).squeeze(3).permute(2, 0, 1).cpu().numpy()
+                dim=1).squeeze(3).permute(2, 0, 1)
             del grid_points2
             with torch.no_grad():
                 matches = fusion_matcher(
