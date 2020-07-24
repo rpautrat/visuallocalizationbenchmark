@@ -18,7 +18,7 @@ import types
 
 from tqdm import tqdm
 
-from matchers import mutual_nn_matcher, fusion_matcher
+from matchers import mutual_nn_matcher, lisrd_matcher
 
 from camera import Camera
 
@@ -240,7 +240,7 @@ def match_features(images, paths, args):
                 dim=1).squeeze(3).permute(2, 0, 1)
             del grid_points2
             with torch.no_grad():
-                matches = fusion_matcher(
+                matches = lisrd_matcher(
                     descriptors1, descriptors2,
                     meta_descriptors1, meta_descriptors2).astype(np.uint32)
             del descriptors1, descriptors2, meta_descriptors1, meta_descriptors2

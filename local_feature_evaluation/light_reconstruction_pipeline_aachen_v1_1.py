@@ -12,6 +12,8 @@ import sqlite3
 
 import torch
 
+import torch.nn.functional as func
+
 import types
 
 from tqdm import tqdm
@@ -205,6 +207,10 @@ def match_features(images, paths, args):
         sorted_idx1 = np.argsort(scores1)
         descriptors1 = descriptors1[sorted_idx1[-n_keypoints1:]]
         descriptors1 = torch.from_numpy(descriptors1).to(device).float()
+        grid_points1 = np.tile(
+            data1['grid_points'][:, sorted_idx1[-n_keypoints1:], :, :],
+            (4, 1, 1, 1))
+        grid_points1 = torch.from_numpy(grid_points1).to(device).float()
 
         data2 = np.load(features_path2)
         descriptors2 = data2['descriptors']
@@ -213,16 +219,26 @@ def match_features(images, paths, args):
         sorted_idx2 = np.argsort(scores2)
         descriptors2 = descriptors2[sorted_idx2[-n_keypoints2:]]
         descriptors2 = torch.from_numpy(descriptors2).to(device).float()
+        grid_points2 = np.tile(
+            data2['grid_points'][:, sorted_idx2[-n_keypoints2:], :, :],
+            (4, 1, 1, 1))
+        grid_points2 = torch.from_numpy(grid_points2).to(device).float()
 
         if 'meta_descriptors' in data1:
             meta_descriptors1 = data1['meta_descriptors']
-            meta_descriptors1 = meta_descriptors1[sorted_idx1[-n_keypoints1:]]
             meta_descriptors1 = torch.from_numpy(
                 meta_descriptors1).to(device).float()
+            meta_descriptors1 = func.normalize(
+                func.grid_sample(meta_descriptors1, grid_points1),
+                dim=1).squeeze(3).permute(2, 0, 1)
+            del grid_points1
             meta_descriptors2 = data2['meta_descriptors']
-            meta_descriptors2 = meta_descriptors2[sorted_idx2[-n_keypoints2:]]
             meta_descriptors2 = torch.from_numpy(
                 meta_descriptors2).to(device).float()
+            meta_descriptors2 = func.normalize(
+                func.grid_sample(meta_descriptors2, grid_points2),
+                dim=1).squeeze(3).permute(2, 0, 1)
+            del grid_points2
             with torch.no_grad():
                 matches = lisrd_matcher(
                     descriptors1, descriptors2,
