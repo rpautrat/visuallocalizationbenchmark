@@ -77,7 +77,7 @@ def mutual_nn_ratio_matcher(descriptors1, descriptors2, ratio=0.8):
 
 
 # Mutual nearest neighbors matcher for fusion_desc
-def fusion_matcher(descriptors1, descriptors2, meta_descriptors1,
+def lisrd_matcher(descriptors1, descriptors2, meta_descriptors1,
                    meta_descriptors2):
     device = descriptors1.device
     desc_weights = torch.einsum('nid,mid->nim', (meta_descriptors1, meta_descriptors2))
