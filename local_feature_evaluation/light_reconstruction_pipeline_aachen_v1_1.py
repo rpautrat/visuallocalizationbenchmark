@@ -183,6 +183,19 @@ def image_ids_to_pair_id(image_id1, image_id2):
 
 
 def match_features(images, paths, args):
+    def keypoint_list_to_grid_points(keypoints, img_size, device):
+        """
+        Convert a 2darray [N, 2] of keypoints into a grid in [-1, 1]²
+        that can be used in torch.nn.functional.interpolate.
+        """
+        n_points = keypoints.shape[0]
+        cuda_keypoints = torch.tensor(keypoints, dtype=torch.float,
+                                      device=device)
+        grid_points = cuda_keypoints * 2. / torch.tensor(
+            img_size, dtype=torch.float, device=device) - 1.
+        grid_points = grid_points[:, [1, 0]].view(1, n_points, 1, 2)
+        return grid_points
+
     # Connect to the database.
     connection = sqlite3.connect(paths.database_path)
     cursor = connection.cursor()
@@ -200,6 +213,7 @@ def match_features(images, paths, args):
         features_path1 = os.path.join(paths.image_path, '%s.%s' % (image_name1, args.method_name))
         features_path2 = os.path.join(paths.image_path, '%s.%s' % (image_name2, args.method_name))
 
+        # Extract local descriptors
         data1 = np.load(features_path1)
         descriptors1 = data1['descriptors']
         scores1 = data1['scores']
@@ -207,10 +221,6 @@ def match_features(images, paths, args):
         sorted_idx1 = np.argsort(scores1)
         descriptors1 = descriptors1[sorted_idx1[-n_keypoints1:]]
         descriptors1 = torch.from_numpy(descriptors1).to(device).float()
-        grid_points1 = np.tile(
-            data1['grid_points'][:, sorted_idx1[-n_keypoints1:], :, :],
-            (4, 1, 1, 1))
-        grid_points1 = torch.from_numpy(grid_points1).to(device).float()
 
         data2 = np.load(features_path2)
         descriptors2 = data2['descriptors']
@@ -219,26 +229,76 @@ def match_features(images, paths, args):
         sorted_idx2 = np.argsort(scores2)
         descriptors2 = descriptors2[sorted_idx2[-n_keypoints2:]]
         descriptors2 = torch.from_numpy(descriptors2).to(device).float()
-        grid_points2 = np.tile(
-            data2['grid_points'][:, sorted_idx2[-n_keypoints2:], :, :],
-            (4, 1, 1, 1))
-        grid_points2 = torch.from_numpy(grid_points2).to(device).float()
+
+        # Extract grid points
+        if 'grid_points' in data1:
+            grid_points1 = np.tile(
+                data1['grid_points'][:, sorted_idx1[-n_keypoints1:], :, :],
+                (4, 1, 1, 1))
+            grid_points1 = torch.from_numpy(grid_points1).to(device).float()
+            grid_points2 = np.tile(
+                data2['grid_points'][:, sorted_idx2[-n_keypoints2:], :, :],
+                (4, 1, 1, 1))
+            grid_points2 = torch.from_numpy(grid_points2).to(device).float()
+        else:
+            assert 'img_size' in data1
+            grid_points1 = []
+            kp1 = data1['keypoints'][sorted_idx1[-n_keypoints1:]]
+            scales1 = data1['scales'][sorted_idx1[-n_keypoints1:]]
+            n_scales1 = np.amax(scales1)
+            for s in range(n_scales1 + 1):
+                grid_points1.append(keypoint_list_to_grid_points(
+                    kp1[scales1 == s], data1['img_size'],
+                    device).repeat(4, 1, 1, 1))
+
+            grid_points2 = []
+            kp2 = data2['keypoints'][sorted_idx2[-n_keypoints2:]]
+            scales2 = data2['scales'][sorted_idx2[-n_keypoints2:]]
+            n_scales2 = np.amax(scales2)
+            for s in range(n_scales2 + 1):
+                grid_points2.append(keypoint_list_to_grid_points(
+                    kp2[scales2 == s], data2['img_size'],
+                    device).repeat(4, 1, 1, 1))
 
         if 'meta_descriptors' in data1:
             meta_descriptors1 = data1['meta_descriptors']
             meta_descriptors1 = torch.from_numpy(
                 meta_descriptors1).to(device).float()
-            meta_descriptors1 = func.normalize(
-                func.grid_sample(meta_descriptors1, grid_points1),
-                dim=1).squeeze(3).permute(2, 0, 1)
-            del grid_points1
             meta_descriptors2 = data2['meta_descriptors']
             meta_descriptors2 = torch.from_numpy(
                 meta_descriptors2).to(device).float()
-            meta_descriptors2 = func.normalize(
-                func.grid_sample(meta_descriptors2, grid_points2),
-                dim=1).squeeze(3).permute(2, 0, 1)
-            del grid_points2
+
+            if len(meta_descriptors1.shape) == 4:
+                meta_descriptors1 = func.normalize(
+                    func.grid_sample(meta_descriptors1, grid_points1),
+                    dim=1).squeeze(3).permute(2, 0, 1)
+                del grid_points1
+                meta_descriptors2 = func.normalize(
+                    func.grid_sample(meta_descriptors2, grid_points2),
+                    dim=1).squeeze(3).permute(2, 0, 1)
+                del grid_points2
+            else:
+                meta_desc1 = torch.empty(
+                    n_keypoints1, 4, meta_descriptors1.shape[2],
+                    dtype=torch.float, device=device)
+                for s in range(n_scales1 + 1):
+                    meta_desc1[scales1 == s] = func.normalize(
+                        func.grid_sample(
+                            meta_descriptors1[s], grid_points1[s]),
+                        dim=1).squeeze(3).permute(2, 0, 1)
+                meta_descriptors1 = meta_desc1
+                del grid_points1
+                meta_desc2 = torch.empty(
+                    n_keypoints2, 4, meta_descriptors2.shape[2],
+                    dtype=torch.float, device=device)
+                for s in range(n_scales2 + 1):
+                    meta_desc2[scales2 == s] = func.normalize(
+                        func.grid_sample(
+                            meta_descriptors2[s], grid_points2[s]),
+                        dim=1).squeeze(3).permute(2, 0, 1)
+                meta_descriptors2 = meta_desc2
+                del grid_points2
+
             with torch.no_grad():
                 matches = lisrd_matcher(
                     descriptors1, descriptors2,
