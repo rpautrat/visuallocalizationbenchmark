@@ -159,7 +159,7 @@ def sequential_adalam_matcher(kp1, kp2, desc1, desc2, meta_desc1,
     del meta_desc1, meta_desc2, desc1, desc2, weights
     desc_sims /= weights_sum
     del weights_sum
-    desc_sims = 2 - 2 * torch.sum(desc_sims, dim=1)
+    desc_sims = 2 - 2 * desc_sims
 
     # Compute putative matches and mutual neighbors
     dd12, nn12 = torch.topk(desc_sims, k=2, dim=1, largest=False)
