@@ -18,7 +18,8 @@ import types
 
 from tqdm import tqdm
 
-from matchers import mutual_nn_matcher, lisrd_matcher
+from matchers import (mutual_nn_matcher, lisrd_matcher,
+                      adalam_matcher, sequential_adalam_matcher)
 
 from camera import Camera
 
@@ -300,9 +301,17 @@ def match_features(images, paths, args):
                 del grid_points2
 
             with torch.no_grad():
-                matches = lisrd_matcher(
-                    descriptors1, descriptors2,
-                    meta_descriptors1, meta_descriptors2).astype(np.uint32)
+                if args.adalam:
+                    matches = adalam_matcher(
+                        torch.from_numpy(kp1).to(device).float(),
+                        torch.from_numpy(kp2).to(device).float(),
+                        descriptors1, descriptors2,
+                        meta_descriptors1, meta_descriptors2,
+                        data1['img_size'], data2['img_size']).astype(np.uint32)
+                else:
+                    matches = lisrd_matcher(
+                        descriptors1, descriptors2,
+                        meta_descriptors1, meta_descriptors2).astype(np.uint32)
             del descriptors1, descriptors2, meta_descriptors1, meta_descriptors2
         else:
             matches = mutual_nn_matcher(descriptors1,
@@ -409,10 +418,16 @@ def recover_query_poses(paths, args):
 
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset_path', required=True, help='Path to the dataset')
-    parser.add_argument('--colmap_path', required=True, help='Path to the COLMAP executable folder')
-    parser.add_argument('--method_name', required=True, help='Name of the method')
-    parser.add_argument('--num_kp', type=int, default=10000, help='Number of keypoints to use')
+    parser.add_argument('--dataset_path', required=True,
+                        help='Path to the dataset')
+    parser.add_argument('--colmap_path', required=True,
+                        help='Path to the COLMAP executable folder')
+    parser.add_argument('--method_name', required=True,
+                        help='Name of the method')
+    parser.add_argument('--num_kp', type=int, default=10000,
+                        help='Number of keypoints to use')
+    parser.add_argument('--adalam', action='store_true',
+                        help='Use Adalam filtering')
     args = parser.parse_args()
 
     # Torch settings for the matcher.
